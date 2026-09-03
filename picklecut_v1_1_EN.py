@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ttcut V2 — table tennis match video: tag rallies, cut the ball-chasing, burn in a
+picklecut V1 — pickleball match video: tag rallies, cut the dead time, burn in a
 persistent scoreboard. One tool, start to finish.
 
 Copyright (c) 2026 MikaDD (Taiwan)
@@ -16,59 +16,68 @@ Versioning
     architectural or output-format changes bump the whole number (V2)
 
 Changelog
-    V2.2-EN 2026-08-30
-        - English interface build of V2.2. Same scoring, cutting and rendering
-          behaviour; only user-facing text and comments changed.
-        - Default player names are now "Player A" / "Player B"
-    V2.2 2026-08-30
-        - Wider number fields: pad seconds (0.5, 1.0) and frame rate (29.97)
-          used to get clipped
-    V2.1 2026-08-30
-        - Scoreboard accent colour is configurable: the point digits and the
-          bar to the left of the names change together
-        - The colour is stored in the tags JSON as scoreboard.accent, so it
-          travels with the file across machines
-        - New --accent flag on the command line, which wins over the JSON value
-        - With no colour given, the generated .ass is byte-identical to V2;
-          every other colour is untouched
-    V2  2026-08-24
-        - Merged into a single tool: run it and it starts a server, opens the
-          browser, and one button turns your tags into a finished video
-        - Scoring lives in Python only (/fold); the tagger's JS copy is gone
-          -- rule changes now happen in one place, no JS/Python cross-checking
-        - Serve-rotation logic moved out of JS into the same fold()
-        - Fixed the mismatch between tagger and ttcut on the minimum cut length
-          (0.15s shown, 2.0s actually cut). Both now use one value, adjustable
-          in the interface
-        - Video is served by Python with HTTP Range support, so scrubbing and
-          Safari playback work
-        - The video path comes from a native file dialog opened by Python
-          (browsers never hand over the real path)
-        - ffmpeg -progress drives a real progress bar; rendering runs in the
-          background and does not block the UI
-        - Unchanged: JSON export/import and the command-line render path both
-          behave exactly as in V1.22
-    V1.22 2026-08-20
-        - Starting game count (for one video per game, continuing a match)
-        - Starting score / handicap, applied every game or first game only
-        - Capped mode: after 10:10 the first to 12 wins, no need to win by two
-        - JSON gains format / start blocks; older files fall back to defaults
-    V1.2 2026-08-20
-        - Fixed a fatal bug: the V1.1 refactor dropped -c:v, so ffmpeg had been
-          silently falling back to the default libx264
-        - Added --hwaccel; videotoolbox hardware decoding is on by default on Mac
-        - --hdr keep falls back automatically on non-HDR sources
-        - libx264/libx265 switch to bitrate mode when --bitrate is given
-    V1.1 2026-08-20
-        - Scoreboard: game count became "filled chip + dark digits"
-        - Quality: frame rate follows the source, bitrate derived from
-          resolution x frame rate, three --quality tiers, HDR detection
-    V1  2026-08-20  first working version
+    V1.1-EN 2026-09-02
+        - Drag & drop: drop a video anywhere in the window and start tagging
+          immediately (the frame rate is auto-estimated during 1x playback);
+          the native dialog opens once at render time to confirm where the
+          file lives, because browsers never reveal a dropped file's path.
+          Dropping a .tags.json loads it as tags.
+        - Arrow keys now step 1 second (Shift = 5 s, Alt = one frame), and
+          they keep working right after using the scrub bar or speed buttons
+          (focus no longer swallows them)
+        - Captions: type a line, press the button (or Enter) and it is
+          burned into the output bottom-centre at the current time for the
+          chosen number of seconds; stored in the JSON as caption events and
+          re-timed automatically across cuts
+        - Multi-video matches: starting server number (#1/#2) is now
+          settable for continuing a game mid-way, and --join losslessly
+          concatenates rendered parts (stream copy)
+        - Timeline strip under the transport (LosslessCut-style): bright =
+          kept, dark = cut, gold = highlighted rallies, ticks = serves,
+          click to jump
+        - Score correction ("fix" bar under the scoreboard): insert an
+          adjust event at the current time that overrides only the filled-in
+          fields (games / points / server / #); scoring continues from there
+        - Every event row gained a retime button that moves the tag to the
+          current playback position - no delete-and-retag
+        - Highlights: H marks the current rally; the render scope select
+          outputs the full match, only the highlights, or both files in one
+          go (CLI: --highlights)
+        - GPU: hardware encoders (NVENC / Quick Sync / AMF / VideoToolbox)
+          are detected at startup by actually test-encoding a few frames;
+          without --encoder the first working one is the default. The UI
+          gains an "encoder" select (auto / each detected encoder / CPU).
+          --quality max still forces CPU libx264
+        - Fixed --hwaccel qsv crashing ffmpeg when combined with the
+          subtitles filter (adds -hwaccel_output_format); --hwaccel now
+          also accepts d3d11va / dxva2
+        - Score sheet: rendering writes <name>.score.txt next to the video
+          (game results and a point log: time, game, server, winner, score,
+          side-outs, ★ highlight); "Export score" button in the UI;
+          --dry-run prints it
+    V1-EN 2026-08-31
+        - First pickleball version, adapted from ttcut V2.2 (the table tennis
+          tool this project descends from)
+        - Scoring engine rewritten for pickleball: traditional side-out
+          scoring (only the serving side scores; doubles starts each game at
+          server #2, the "0-0-2" start) and rally scoring (every rally
+          scores, serve follows the winner) -- selectable in the interface
+        - Singles / doubles toggle; doubles server number shown as one or two
+          accent dots on the scoreboard and in the interface
+        - Official score call (e.g. 5-3-2) shown while tagging
+        - Tags JSON bumped to version 3 with sport / format.scoring /
+          format.side fields; the A/B keys now mean "rally won by A/B" and
+          the engine decides whether that is a point or a side-out
+        - "Lets" renamed to "replays" (--cut-replays / --replay-tail)
+        - Default accent colour is now pickleball chartreuse #BFD730
+        - Everything downstream of scoring (cutting, rendering, server, CLI)
+          carried over from ttcut V2.2 unchanged
 
 Usage:
-    python3 ttcut_v2_2_EN.py                                    <- open the UI (the usual way)
-    python3 ttcut_v2_2_EN.py IMG_1496.tags.json IMG_1496.MOV    <- render from the command line
-    python3 ttcut_v2_2_EN.py tags.json video.MOV --quality max --dry-run
+    python3 picklecut_v1_1_EN.py                                    <- open the UI (the usual way)
+    python3 picklecut_v1_1_EN.py IMG_1496.tags.json IMG_1496.MOV    <- render from the command line
+    python3 picklecut_v1_1_EN.py tags.json video.MOV --quality max --dry-run
+    python3 picklecut_v1_1_EN.py --join g1.cut.mp4 g2.cut.mp4 -o match.mp4
 
 Requirements:
     Python 3.8+ and ffmpeg (not bundled, install it yourself)
@@ -82,7 +91,7 @@ import subprocess, sys, threading, time, webbrowser
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
-VERSION = "V2.2-EN"
+VERSION = "V1.1-EN"
 
 IS_MAC = platform.system() == "Darwin"
 IS_WIN = platform.system() == "Windows"
@@ -91,23 +100,25 @@ IS_WIN = platform.system() == "Windows"
 
 BASE_W, BASE_H = 1920, 1080
 PAD_L, PAD_B   = 64, 64
-PANEL_W        = 480
+PANEL_W        = 532          # wider than ttcut: a serve-dot strip sits right of the points
 ROW_H          = 54
 COL_GAMES_X    = 312          # left edge of the games column (relative to the panel)
 COL_POINTS_X   = 392          # left edge of the points column
+COL_SERVE_X    = 480          # left edge of the serve-dot strip
 FS_NUM         = 44           # games and points share one type size
+FS_DOT         = 17           # serve dots (● / ●●)
 
 C_PANEL    = "&H40250A&"      # deep blue panel (ASS is BGR)
-C_ACCENT   = "&H187AFF&"      # orange #FF7A18
+C_ACCENT   = "&H30D7BF&"      # pickleball chartreuse #BFD730
 C_NAME     = "&HF9F2EA&"      # near white
 C_GAMES_BG = "&HEDE3D6&"      # games chip: a light block against the dark panel
 C_GAMES    = "&H40250A&"      # games digits: dark blue on the light chip
-C_POINTS   = "&H187AFF&"      # points: orange digits on the dark panel
+C_POINTS   = "&H30D7BF&"      # points: chartreuse digits on the dark panel
 C_RULE     = "&H6E4820&"      # divider lines
 
 A_PANEL, A_CHIP, A_RULE = 0x1E, 0x00, 0x40    # 0x00 fully opaque -> 0xFF fully transparent
 
-DEFAULT_ACCENT = "#FF7A18"    # accent shared by the point digits and the bar beside the names
+DEFAULT_ACCENT = "#BFD730"    # accent shared by the point digits, serve dots and the side bar
 
 
 def ass_colour(hex_rgb, fallback=C_ACCENT):
@@ -128,6 +139,42 @@ FONT_NUM  = ("Helvetica Neue" if IS_MAC else
 
 # Hardware encoder per platform
 HW_ENCODER = "h264_videotoolbox" if IS_MAC else "libx264"
+HW_CANDIDATES = (["h264_videotoolbox"] if IS_MAC else
+                 ["h264_nvenc", "h264_qsv", "h264_amf"] if IS_WIN else
+                 ["h264_nvenc", "h264_qsv"])
+_HW_CACHE = {}
+
+
+def detect_hw_encoders(ffmpeg):
+    """Test-encode three frames with each candidate hardware encoder and return
+    the ones that work. An encoder listed by ffmpeg -encoders does not mean the
+    card is actually in this machine, so a real test encode is required.
+    Cached per ffmpeg path; the UI's /state and the render share the result."""
+    if not ffmpeg:
+        return []
+    if ffmpeg in _HW_CACHE:
+        return _HW_CACHE[ffmpeg]
+    ok = []
+    for enc in HW_CANDIDATES:
+        try:
+            r = subprocess.run(
+                [ffmpeg, "-hide_banner", "-loglevel", "error",
+                 "-f", "lavfi", "-i", "color=size=64x64:rate=30",
+                 "-frames:v", "3", "-c:v", enc, "-f", "null", "-"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+            if r.returncode == 0:
+                ok.append(enc)
+        except Exception:
+            pass
+    _HW_CACHE[ffmpeg] = ok
+    return ok
+
+
+def default_encoder(ffmpeg):
+    """Default when --encoder is not given: the first working hardware encoder,
+    else HW_ENCODER (videotoolbox on Mac, CPU libx264 elsewhere)."""
+    hw = detect_hw_encoders(ffmpeg)
+    return hw[0] if hw else HW_ENCODER
 
 # Three --quality tiers: bitrate multiplier / CRF / x264 preset / force software encoding
 QUALITY = {
@@ -145,51 +192,83 @@ def fold_full(events, fmt, start, first_server=0):
     """Fold the event stream into scoreboard states. This is the only scoring
     implementation in the project; the UI and the CLI both go through it.
 
-    fmt   = dict(target, deuce='standard'|'capped', cap)
+    fmt   = dict(target, deuce='standard'|'capped', cap,
+                 scoring='sideout'|'rally', doubles=True|False)
     start = dict(games=(gA, gB), points=(a, b), scope='every'|'first')
     first_server = 0(A) / 1(B)
 
     Returns dict:
-        states  [(source time, gA, gB, a, b), ...]  for the ASS scoreboard;
-                the first entry has time None
-        snaps   same length as events; a dict for point events, None otherwise,
-                used by the event list in the UI
-        cur     current state, including who serves next
+        states  [(source time, gA, gB, a, b, server, serverNum), ...] for the
+                ASS scoreboard; the first entry has time None
+        snaps   same length as events; a dict for rally (point) events, None
+                otherwise, used by the event list in the UI. `scored` is False
+                when the rally only moved the serve (a side-out).
+        cur     current state, including who serves next and the server number
 
-    Serve rotation counts only points actually played, so handicap starting
-    points do not shift the rotation; once both sides reach target-1 (deuce)
-    the serve changes every point.
+    Pickleball rules:
+      side-out  Only the serving side scores. Doubles starts every game at
+                server #2 (the "0-0-2" start); a lost rally moves #1 -> #2,
+                then side-out to the other team at #1. Singles has no server
+                numbers; a lost rally is a straight side-out. A game can only
+                end on a rally won by the serving side.
+      rally     Every rally scores a point for its winner, and the winner
+                serves the next rally (no server numbers).
     """
     T, mode, cap = fmt["target"], fmt["deuce"], fmt["cap"]
+    sideout = fmt.get("scoring", "sideout") == "sideout"
+    doubles = bool(fmt.get("doubles", True))
     gA, gB = start["games"]
     sp, scope = list(start["points"]), start["scope"]
 
     def init_pts(gi):
         return list(sp) if (scope == "every" or gi == 0) else [0, 0]
 
+    start_snum = int(start.get("serverNum", 0) or 0)
+
+    def game_serve(gi):
+        # First server alternates between games; a doubles side-out game
+        # starts at server #2, everything else at #1. A video that picks up
+        # mid-game can override the number for its opening state only.
+        num = 2 if (sideout and doubles) else 1
+        if gi == 0 and sideout and doubles and start_snum in (1, 2):
+            num = start_snum
+        return (first_server + gi) % 2, num
+
     gi = 0
     a, b = init_pts(0)
-    server, served_in_turn = first_server, 0
-    pending = False                        # end of game: keep the score on screen until the next point
-    states = [(None, gA, gB, a, b)]        # opening state; its timestamp is filled in later
+    server, snum = game_serve(0)
+    pending = False                        # end of game: keep the score on screen until the next rally
+    states = [(None, gA, gB, a, b, server, snum)]   # opening state; its timestamp is filled in later
     snaps = []
-
-    def is_deuce():
-        return a >= T - 1 and b >= T - 1
 
     def game_over():
         hi, lo = max(a, b), min(a, b)
-        if mode == "capped" and hi >= cap:      # after 10:10 the first to cap wins, no win-by-two
+        if mode == "capped" and hi >= cap:      # first to the cap wins, no win-by-two
             return True
-        return hi >= T and hi - lo >= 2          # standard: 11 points and two clear
+        return hi >= T and hi - lo >= 2          # standard: reach target and two clear
 
     for e in events:
         if e["type"] == "game":
             gi += 1
             a, b = init_pts(gi)
-            server, served_in_turn = (first_server + gi) % 2, 0
+            server, snum = game_serve(gi)
             pending = False
-            states.append((e["t"], gA, gB, a, b))
+            states.append((e["t"], gA, gB, a, b, server, snum))
+            snaps.append(None)
+            continue
+        if e["type"] == "adjust":
+            # Manual correction: override only the fields the event carries;
+            # scoring continues from the corrected state
+            g = e.get("games", {}) or {}
+            p = e.get("points", {}) or {}
+            gA, gB = int(g.get("A", gA)), int(g.get("B", gB))
+            a, b = int(p.get("A", a)), int(p.get("B", b))
+            if e.get("server") in ("A", "B"):
+                server = 0 if e["server"] == "A" else 1
+            if e.get("serverNum") in (1, 2):
+                snum = e["serverNum"] if (sideout and doubles) else 1
+            pending = False
+            states.append((e["t"], gA, gB, a, b, server, snum))
             snaps.append(None)
             continue
         if e["type"] != "point":
@@ -198,13 +277,34 @@ def fold_full(events, fmt, start, first_server=0):
         if pending:
             gi += 1
             a, b = init_pts(gi)
+            server, snum = game_serve(gi)
             pending = False
-        if e["winner"] == "A":
-            a += 1
-        else:
-            b += 1
-        won = game_over()
-        snaps.append(dict(a=a, b=b, won=won,
+        served, served_num, game_no = server, snum, gA + gB + 1
+        w = 0 if e["winner"] == "A" else 1
+        scored = True
+        if sideout:
+            if w == server:                      # serving side wins: point, same server
+                if w == 0:
+                    a += 1
+                else:
+                    b += 1
+            else:                                # serving side loses: no point, serve moves
+                scored = False
+                if doubles and snum == 1:
+                    snum = 2                     # partner serves next
+                else:
+                    server, snum = 1 - server, 1  # side-out
+        else:                                    # rally scoring: every rally scores,
+            if w == 0:                           # serve follows the winner
+                a += 1
+            else:
+                b += 1
+            if w != server:
+                server, snum = w, 1
+        won = scored and game_over()
+        snaps.append(dict(a=a, b=b, won=won, scored=scored,
+                          srv=server, srvNum=snum,
+                          served=served, servedNum=served_num, gameNo=game_no,
                           gA=gA + (1 if won and a > b else 0),
                           gB=gB + (1 if won and b > a else 0)))
         if won:
@@ -213,60 +313,91 @@ def fold_full(events, fmt, start, first_server=0):
             else:
                 gB += 1
             pending = True
-            server, served_in_turn = (first_server + gi + 1) % 2, 0   # other player serves first next game
-        else:
-            served_in_turn += 1
-            if served_in_turn >= (1 if is_deuce() else 2):
-                server, served_in_turn = 1 - server, 0
-        states.append((e["t"], gA, gB, a, b))
+            server, snum = game_serve(gi + 1)    # other side serves first next game
+        states.append((e["t"], gA, gB, a, b, server, snum))
 
-    cur = dict(a=a, b=b, gA=gA, gB=gB, gi=gi, server=server, pending=pending,
-               gameNo=gA + gB + 1 - (1 if pending else 0))
+    cur = dict(a=a, b=b, gA=gA, gB=gB, gi=gi, server=server, serverNum=snum,
+               pending=pending, gameNo=gA + gB + 1 - (1 if pending else 0))
     return dict(states=states, snaps=snaps, cur=cur)
 
 
 def fold(events, fmt, start):
-    """State sequence for the ASS scoreboard (identical output to V1.22 fold())."""
+    """State sequence for the ASS scoreboard."""
     return fold_full(events, fmt, start)["states"]
 
 
 def read_format(doc):
-    """Read match format and starting score from JSON; older files without
-    these fields fall back to defaults."""
+    """Read match format and starting score from JSON; files without these
+    fields fall back to defaults (side-out doubles to 11, win by 2)."""
     f = doc.get("format", {}) or {}
     target = int(f.get("pointsPerGame", doc.get("pointsPerGame", 11)))
     mode = f.get("deuce", "standard")
     cap = int(f.get("cap", target + 1))
+    scoring = f.get("scoring", "sideout")
+    doubles = f.get("side", "doubles") != "singles"
     st = doc.get("start", {}) or {}
     g = st.get("games", {}) or {}
     p = st.get("points", {}) or {}
-    fmt = dict(target=target, deuce=mode, cap=cap)
+    fmt = dict(target=target, deuce=mode, cap=cap,
+               scoring=scoring, doubles=doubles)
     start = dict(games=[int(g.get("A", 0)), int(g.get("B", 0))],
                  points=[int(p.get("A", 0)), int(p.get("B", 0))],
-                 scope=st.get("handicapScope", "every"))
+                 scope=st.get("handicapScope", "every"),
+                 serverNum=int(st.get("serverNum", 0) or 0))   # 0 = fresh-game default
     return fmt, start
 
 
 # ─────────────────────────────────────────── Cut ranges
 
 def build_cuts(events, tail, lead, min_cut, cut_lets, let_tail):
-    """point -> next serve = cut. serve -> serve (a let) = kept by default,
-    optionally cut as well."""
+    """rally end -> next serve = cut. serve -> serve (a replayed serve) = kept
+    by default, optionally cut as well."""
     cuts = []
     for i, e in enumerate(events):
         if e["type"] == "point":
             nxt = next((x for x in events[i + 1:] if x["type"] == "serve"), None)
             if nxt:
-                cuts.append((e["t"] + tail, nxt["t"] - lead, "ball retrieval after point"))
+                cuts.append((e["t"] + tail, nxt["t"] - lead, "dead time after rally"))
         elif e["type"] == "serve" and cut_lets:
             nxt = events[i + 1] if i + 1 < len(events) else None
             if nxt and nxt["type"] == "serve":
-                cuts.append((e["t"] + let_tail, nxt["t"] - lead, "ball retrieval after let"))
+                cuts.append((e["t"] + let_tail, nxt["t"] - lead, "dead time after replay"))
 
     kept, dropped = [], []
     for f, t, why in cuts:
         (kept if t - f >= min_cut else dropped).append((f, t, why))
     return sorted(kept), sorted(dropped)
+
+
+def highlight_ranges(events, lead, tail):
+    """Source-time ranges of the rallies marked with a highlight event.
+    A highlight belongs to the rally started by the most recent serve at or
+    before it, so pressing H during the rally or right after it ends both
+    land on the same rally. Overlapping ranges are merged."""
+    serves = [e for e in events if e["type"] == "serve"]
+    rngs = []
+    for h in (e for e in events if e["type"] == "highlight"):
+        sv = None
+        for s in serves:
+            if s["t"] <= h["t"]:
+                sv = s
+            else:
+                break
+        if sv is None:
+            continue
+        pt = next((x for x in events
+                   if x["type"] == "point" and x["t"] >= sv["t"]), None)
+        if pt is None:
+            continue
+        rngs.append((max(0.0, sv["t"] - lead), pt["t"] + tail))
+    rngs.sort()
+    merged = []
+    for s, e2 in rngs:
+        if merged and s <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], e2))
+        else:
+            merged.append((s, e2))
+    return merged
 
 
 def keeps_from_cuts(head, end, cuts):
@@ -320,7 +451,8 @@ def rect(x, y, w, h, colour, alpha, layer=0):
 
 
 def build_ass(states, src2out, total, names, width, height,
-              font_name=FONT_NAME, font_num=FONT_NUM, accent=None):
+              font_name=FONT_NAME, font_num=FONT_NUM, accent=None,
+              captions=()):
     # The point digits and the bar beside the names share one colour
     c_accent = c_points = accent or C_ACCENT
     k = min(width / BASE_W, height / BASE_H)
@@ -332,11 +464,13 @@ def build_ass(states, src2out, total, names, width, height,
     name_x = x0 + S(28)
     gx, gw = x0 + S(COL_GAMES_X), S(COL_POINTS_X) - S(COL_GAMES_X)
     games_cx = gx + gw // 2
-    points_cx = x0 + S(COL_POINTS_X) + (pw - S(COL_POINTS_X)) // 2
+    points_cx = x0 + S(COL_POINTS_X) + (S(COL_SERVE_X) - S(COL_POINTS_X)) // 2
+    serve_cx = x0 + S(COL_SERVE_X) + (pw - S(COL_SERVE_X)) // 2
     fs = S(FS_NUM)
+    fs_dot = S(FS_DOT)
 
     head = f"""[Script Info]
-; ttcut {VERSION}
+; picklecut {VERSION}
 ScriptType: v4.00+
 PlayResX: {width}
 PlayResY: {height}
@@ -348,6 +482,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Nm,{font_name},{S(29)},{C_NAME},{C_NAME},&H00000000&,&H00000000&,0,0,0,0,100,100,0,0,1,0,0,4,0,0,0,1
 Style: Nu,{font_num},{fs},{c_points},{c_points},&H00000000&,&H00000000&,1,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 Style: Gfx,Arial,20,&H00FFFFFF&,&H00FFFFFF&,&H00000000&,&H00000000&,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
+Style: Cap,{font_name},{S(34)},{C_NAME},{C_NAME},&H00000000&,&H96000000&,0,0,0,0,100,100,0,0,1,{max(1, S(2))},{max(1, S(1))},2,0,0,{S(46)},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -368,6 +503,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         rect(x0, y0 + rh, pw, max(1, S(2)), C_RULE, A_RULE),           # horizontal divider
         rect(gx, y0, max(1, S(2)), rh * 2, C_RULE, A_RULE),
         rect(x0 + S(COL_POINTS_X), y0, max(1, S(2)), rh * 2, C_RULE, A_RULE),
+        rect(x0 + S(COL_SERVE_X), y0, max(1, S(2)), rh * 2, C_RULE, A_RULE),
     ]:
         add(layer, "Gfx", 0, total, d)
 
@@ -376,12 +512,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         add(1, "Nm", 0, total,
             f"{{\\an4\\pos({name_x},{row_y[i]})\\1c{C_NAME}}}{nm}")
 
-    # ── Games and points (change with events): same size and weight, told
-    # apart by the background behind them
+    # ── Games, points and serve dots (change with events): games and points
+    # share a size, told apart by the background; the serving side carries one
+    # accent dot (or two for doubles server #2) in the right-hand strip
     stamped = [(0.0, *states[0][1:])] if states[0][0] is None else []
-    stamped += [(src2out(t), gA, gB, a, b) for t, gA, gB, a, b in states if t is not None]
+    stamped += [(src2out(t), *rest) for t, *rest in states if t is not None]
 
-    for i, (t, gA, gB, a, b) in enumerate(stamped):
+    for i, (t, gA, gB, a, b, srv, snum) in enumerate(stamped):
         end = stamped[i + 1][0] if i + 1 < len(stamped) else total
         if end - t < 0.02:
             continue
@@ -390,6 +527,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 f"{{\\an5\\pos({games_cx},{row_y[row]})\\fs{fs}\\b1\\1c{C_GAMES}}}{g}")
             add(2, "Nu", t, end,
                 f"{{\\an5\\pos({points_cx},{row_y[row]})\\fs{fs}\\b1\\1c{c_points}}}{p}")
+        if srv is not None:
+            add(2, "Nu", t, end,
+                f"{{\\an5\\pos({serve_cx},{row_y[srv]})\\fs{fs_dot}\\b0\\1c{c_accent}}}"
+                + "●" * max(1, snum))
+
+    # ── Captions (burned bottom-centre, re-timed across the cuts)
+    for ct, cdur, ctext in captions:
+        a2, b2 = src2out(ct), src2out(ct + max(0.5, cdur))
+        if b2 - a2 < 0.02:
+            continue                      # the caption fell entirely inside a cut
+        safe = str(ctext).replace("{", "(").replace("}", ")").replace("\n", r"\N")
+        add(3, "Cap", a2, min(b2, total), safe)
 
     return head + "\n".join(lines) + "\n"
 
@@ -468,8 +617,8 @@ def is_10bit(info):
 
 
 def auto_bitrate(w, h, fps, scale=1.0):
-    """Derive a bitrate from the pixel rate. Table tennis is high-motion, so
-    this runs more generous than a general-purpose figure."""
+    """Derive a bitrate from the pixel rate. Pickleball exchanges are
+    high-motion, so this runs more generous than a general-purpose figure."""
     mpix_s = w * h * max(fps, 1) / 1e6          # 1080p30 ≈ 62 Mpix/s
     mbps = mpix_s * 0.30 * scale                # -> about 19 Mbps
     return f"{max(8.0, min(120.0, mbps)):.0f}M"
@@ -549,20 +698,41 @@ def plan(doc, opt):
 
     serves = [e for e in events if e["type"] == "serve"]
     points = [e for e in events if e["type"] == "point"]
+    hl = highlight_ranges(events, lead, tail)
     if not serves or not points:
-        return dict(ok=False, reason="No serve or point events, nothing to cut.",
+        return dict(ok=False, reason="No serve or rally events, nothing to cut.",
                     scoring=sc, events=events, fmt=fmt, start=start,
-                    cuts=[], dropped=[], keeps=[], total=0.0, span=0.0)
+                    cuts=[], dropped=[], keeps=[], hl=hl, total=0.0, span=0.0)
+
+    if opt.get("scope") == "highlights":
+        if not hl:
+            return dict(ok=False,
+                        reason="No highlight marks yet — press H during (or right after) a rally.",
+                        scoring=sc, events=events, fmt=fmt, start=start,
+                        cuts=[], dropped=[], keeps=[], hl=hl, total=0.0, span=0.0)
+        keeps = list(hl)
+        head, end = keeps[0][0], keeps[-1][1]
+        src2out, total = make_mapper(keeps)
+        return dict(ok=True, reason=None, scoring=sc, events=events,
+                    fmt=fmt, start=start, lead=lead, tail=tail,
+                    cuts=[], dropped=[], keeps=keeps, hl=hl,
+                    src2out=src2out, total=total,
+                    head=head, end=end, span=end - head,
+                    serves=len(serves), points=len(points))
 
     head = serves[0]["t"] - lead
     end = points[-1]["t"] + tail
-    cuts, dropped = build_cuts(events, tail, lead, min_cut, cut_lets, let_tail)
+    # Only serve / point / game events shape the cuts; captions, highlights
+    # and score corrections must not sit between two serves when the
+    # replay-adjacency check runs
+    cut_events = [e for e in events if e.get("type") in ("serve", "point", "game")]
+    cuts, dropped = build_cuts(cut_events, tail, lead, min_cut, cut_lets, let_tail)
     keeps = keeps_from_cuts(head, end, cuts)
     src2out, total = make_mapper(keeps)
 
     return dict(ok=True, reason=None, scoring=sc, events=events,
                 fmt=fmt, start=start, lead=lead, tail=tail,
-                cuts=cuts, dropped=dropped, keeps=keeps,
+                cuts=cuts, dropped=dropped, keeps=keeps, hl=hl,
                 src2out=src2out, total=total,
                 head=head, end=end, span=end - head,
                 serves=len(serves), points=len(points))
@@ -587,8 +757,8 @@ def build_render(doc, plan_d, video, out, opt, ffmpeg, ffprobe, log=print,
         w, h = BASE_W, BASE_H
         log("! Could not read the video resolution; laying out the scoreboard for 1920x1080.")
 
-    # ── Frame rate: follows the source by default. Fast table tennis motion
-    # should not be casually dropped to 30.
+    # ── Frame rate: follows the source by default. Fast exchanges at the
+    # kitchen line should not be casually dropped to 30.
     fps_opt = opt.get("fps", "source")
     if fps_opt and fps_opt != "source":
         fps_val, fps_arg = float(fps_opt), str(fps_opt)
@@ -598,7 +768,7 @@ def build_render(doc, plan_d, video, out, opt, ffmpeg, ffprobe, log=print,
         fps_val, fps_arg = float(doc.get("fps", 30)), str(doc.get("fps", 30))
 
     # ── Encoder and HDR
-    enc = opt.get("encoder") or ("libx264" if q["force_sw"] else HW_ENCODER)
+    enc = opt.get("encoder") or ("libx264" if q["force_sw"] else default_encoder(ffmpeg))
     hdr = is_hdr(info)
     mode = opt.get("hdr", "auto")
     if mode == "auto":
@@ -654,11 +824,15 @@ def build_render(doc, plan_d, video, out, opt, ffmpeg, ffprobe, log=print,
                   or (doc.get("scoreboard", {}) or {}).get("accent")
                   or DEFAULT_ACCENT)
 
+    captions = [(e["t"], float(e.get("dur", 3.0)), e.get("text", ""))
+                for e in plan_d["events"]
+                if e.get("type") == "caption" and str(e.get("text", "")).strip()]
+
     with open(os.path.join(workdir, ass_name), "w", encoding="utf-8") as f:
         f.write(build_ass(plan_d["scoring"]["states"], plan_d["src2out"],
                           plan_d["total"], names, w, h,
                           opt.get("font") or FONT_NAME, FONT_NUM,
-                          ass_colour(accent_hex)))
+                          ass_colour(accent_hex), captions))
     fgraph = filter_script(plan_d["keeps"], ass_name, fps_arg, tonemap)
     with open(os.path.join(workdir, flt_name), "w", encoding="utf-8") as f:
         f.write(fgraph)          # kept purely for debugging
@@ -673,13 +847,15 @@ def build_render(doc, plan_d, video, out, opt, ffmpeg, ffprobe, log=print,
     cmd = [ffmpeg, "-y",
            *(["-progress", "pipe:1", "-nostats"] if progress else []),
            *(["-hwaccel", hw] if hw != "none" else []),
+           *(["-hwaccel_output_format", "p010le" if is_10bit(info) else "nv12"]
+             if hw == "qsv" else []),
            "-to", f"{plan_d['keeps'][-1][1] + 1:.3f}", "-i", os.path.abspath(video),
            "-filter_complex", fgraph,
            "-map", "[vout]", "-map", "[ac]",
            *video_encoder_args(enc, crf, preset, bitrate, pix_fmt, sw_bitrate),
            *colour_tags, *tag,
            "-c:a", "aac", "-b:a", "256k",
-           "-metadata", f"comment=ttcut {VERSION}",
+           "-metadata", f"comment=picklecut {VERSION}",
            "-movflags", "+faststart", os.path.basename(out)]
     return cmd, workdir, flt_name
 
@@ -689,24 +865,122 @@ def summary_lines(plan_d, opt, video):
     fmt, start = plan_d["fmt"], plan_d["start"]
     out = [f"Source    {os.path.basename(video)}",
            f"Tagged    {ts(plan_d['head'])} -> {ts(plan_d['end'])}   {plan_d['span']:.1f}s"]
-    rule = ("standard deuce (win by 2)" if fmt["deuce"] == "standard"
-            else f"capped (after 10:10, first to {fmt['cap']} wins)")
-    bits = [f"{fmt['target']} points per game", rule]
+    rule = ("win by 2" if fmt["deuce"] == "standard"
+            else f"capped (first to {fmt['cap']} wins)")
+    bits = [f"{'doubles' if fmt.get('doubles', True) else 'singles'}",
+            f"{'side-out' if fmt.get('scoring', 'sideout') == 'sideout' else 'rally'} scoring",
+            f"game to {fmt['target']}", rule]
     if any(start["games"]):
         bits.append(f"starting games {start['games'][0]}:{start['games'][1]}")
     if any(start["points"]):
         sc = "every game" if start["scope"] == "every" else "first game only"
         bits.append(f"handicap {start['points'][0]}:{start['points'][1]} ({sc})")
     out.append(f"Format    {' · '.join(bits)}")
-    out.append(f"Events    {plan_d['points']} points · {plan_d['serves']} serves · "
-               f"{plan_d['serves'] - plan_d['points']} lets")
-    out.append(f"Padding   {plan_d['tail']}s after point · {plan_d['lead']}s before serve · "
+    sc = plan_d["scoring"]
+    finals = [f"{s['a']}–{s['b']}" for s in sc["snaps"] if s and s["won"]]
+    out.append(f"Games     A {sc['cur']['gA']} : {sc['cur']['gB']} B"
+               + (f" ({', '.join(finals)})" if finals else ""))
+    out.append(f"Events    {plan_d['points']} rallies · {plan_d['serves']} serves · "
+               f"{plan_d['serves'] - plan_d['points']} replays")
+    out.append(f"Padding   {plan_d['tail']}s after rally · {plan_d['lead']}s before serve · "
                f"min cut {opt.get('min_cut', DEFAULT_MIN_CUT)}s"
-               f"{' · lets cut too' if opt.get('cut_lets') else ''}")
+               f"{' · replays cut too' if opt.get('cut_lets') else ''}")
     span, total = plan_d["span"], plan_d["total"]
     out.append(f"Removed   {len(plan_d['cuts'])} segments · {span - total:.1f}s")
     out.append(f"Result    {total:.1f}s   {(span - total) / span * 100:.0f}% shorter"
                if span > 0 else "Result    0s")
+    return out
+
+
+def doc_names(doc):
+    p = doc.get("players", {}) or {}
+    return [str(p.get("A", "A")), str(p.get("B", "B"))]
+
+
+def rally_highlights(events):
+    """Rallies marked by a highlight event: the set of indices (into events)
+    of their point events. Same attribution rule as highlight_ranges (the
+    rally started by the last serve before the highlight)."""
+    marked = set()
+    serves = [i for i, e in enumerate(events) if e["type"] == "serve"]
+    for h in (e for e in events if e["type"] == "highlight"):
+        sv = None
+        for i in serves:
+            if events[i]["t"] <= h["t"]:
+                sv = i
+            else:
+                break
+        if sv is None:
+            continue
+        pt = next((i for i in range(sv, len(events)) if events[i]["type"] == "point"), None)
+        if pt is not None:
+            marked.add(pt)
+    return marked
+
+
+def score_report(plan_d, names, video):
+    """Score sheet (plain text): game results and a point-by-point log.
+    Written next to the rendered video; the UI's "Export score" button and
+    --dry-run use it too."""
+    fmt, start, sc = plan_d["fmt"], plan_d["start"], plan_d["scoring"]
+    events, snaps, cur = plan_d["events"], sc["snaps"], sc["cur"]
+    doubles = bool(fmt.get("doubles"))
+    marked = rally_highlights(events)
+
+    def who(side, num):
+        return "AB"[side] + (f"#{num}" if doubles and num else "")
+
+    rule = "win by 2" if fmt["deuce"] == "standard" else f"capped at {fmt['cap']}"
+    out = [f"picklecut {VERSION} score sheet",
+           f"Source    {os.path.basename(video) if video else '—'}",
+           f"A         {names[0]}",
+           f"B         {names[1]}",
+           f"Format    {'doubles' if doubles else 'singles'} · "
+           f"{'side-out' if fmt.get('scoring', 'sideout') == 'sideout' else 'rally'} scoring · "
+           f"game to {fmt['target']} · {rule}"]
+    if any(start["games"]) or any(start["points"]):
+        out.append(f"Start     games {start['games'][0]}:{start['games'][1]} · "
+                   f"points {start['points'][0]}:{start['points'][1]}")
+
+    games, rows, n = [], [], 0
+    for i, e in enumerate(events):
+        s = snaps[i] if i < len(snaps) else None
+        if e["type"] == "point" and s:
+            n += 1
+            if s["won"]:
+                games.append((s["gameNo"], s["a"], s["b"]))
+            rows.append((str(n), ts(e["t"]), str(s["gameNo"]),
+                         who(s["served"], s.get("servedNum")), e["winner"],
+                         f"{s['a']}–{s['b']}",
+                         ("side-out" if s.get("scored") is False else
+                          f"games {s['gA']}–{s['gB']}" if s["won"] else ""),
+                         "★" if i in marked else ""))
+        elif e["type"] == "game":
+            rows.append(("", ts(e["t"]), "", "", "", "New game", "", ""))
+        elif e["type"] == "adjust":
+            bits = []
+            if e.get("games"):
+                bits.append("games " + "–".join(str(e["games"].get(k, "·")) for k in "AB"))
+            if e.get("points"):
+                bits.append("points " + "–".join(str(e["points"].get(k, "·")) for k in "AB"))
+            if e.get("server") or e.get("serverNum"):
+                bits.append("serve " + str(e.get("server") or "")
+                            + (f"#{e['serverNum']}" if e.get("serverNum") else ""))
+            rows.append(("", ts(e["t"]), "", "", "", "Adjust " + " · ".join(bits), "", ""))
+
+    out += ["", f"Games     A {cur['gA']} : {cur['gB']} B"]
+    for g, a, b in games:
+        out.append(f"  Game {g}    {a}–{b}")
+    if not cur["pending"] and (cur["a"] or cur["b"]):
+        out.append(f"  Game {cur['gameNo']}    {cur['a']}–{cur['b']} (in progress)")
+
+    out += ["", "Point log (times are source-video times; ★ = highlight"
+            + ("; side-out = only the serve changed hands" if fmt.get("scoring", "sideout") == "sideout" else "")
+            + ("; Serve column #1/#2 = doubles server number" if doubles else "") + ")",
+            "   #  Time         G  Serve  Won  Score"]
+    for r in rows:
+        out.append(f"{r[0]:>4}  {r[1]:<10}  {r[2]:>2}  {r[3]:<5} {r[4]:<3}  "
+                   f"{r[5]:<8} {r[6]:<8} {r[7]}".rstrip())
     return out
 
 
@@ -780,65 +1054,71 @@ class Job:
 _TIME_RE = re.compile(r"out_time=(\d+):(\d\d):(\d\d(?:\.\d+)?)")
 
 
-def run_job(job, cmd, workdir):
-    """Run ffmpeg and parse its -progress output. Runs on a background thread."""
-    try:
-        job.proc = subprocess.Popen(
-            cmd, cwd=workdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, encoding="utf-8", errors="replace", bufsize=1)
-    except Exception as ex:
-        job.state, job.message = "error", f"Could not start ffmpeg: {ex}"
-        return
+def run_job(job, tasks):
+    """Run one or more ffmpeg commands in sequence (e.g. the full match and
+    the highlight reel), parsing -progress into one combined percentage.
+    tasks = [(cmd, workdir, output_seconds), ...]. Runs on a background thread."""
+    grand = sum(t[2] for t in tasks) or 0.001
+    done_secs = 0.0
+    for ti, (cmd, workdir, secs) in enumerate(tasks):
+        try:
+            job.proc = subprocess.Popen(
+                cmd, cwd=workdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, encoding="utf-8", errors="replace", bufsize=1)
+        except Exception as ex:
+            job.state, job.message = "error", f"Could not start ffmpeg: {ex}"
+            return
 
-    err_tail = []
+        err_tail = []
 
-    def drain_err():
-        for line in job.proc.stderr:
-            line = line.rstrip()
-            if line:
-                err_tail.append(line)
-                del err_tail[:-40]
-    t = threading.Thread(target=drain_err, daemon=True)
-    t.start()
+        def drain_err():
+            for line in job.proc.stderr:
+                line = line.rstrip()
+                if line:
+                    err_tail.append(line)
+                    del err_tail[:-40]
+        t = threading.Thread(target=drain_err, daemon=True)
+        t.start()
 
-    job.message = "Encoding…"
-    for line in job.proc.stdout:
-        line = line.strip()
-        m = _TIME_RE.search(line)
-        if m:
-            secs = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
-            job.pct = min(99.5, secs / job.total * 100)
-        elif line.startswith("speed="):
-            job.speed = line.split("=", 1)[1].strip()
-        elif line == "progress=end":
-            job.pct = 100.0
+        job.message = ("Encoding…" if len(tasks) == 1
+                       else f"Encoding {ti + 1}/{len(tasks)}…")
+        for line in job.proc.stdout:
+            line = line.strip()
+            m = _TIME_RE.search(line)
+            if m:
+                cur = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+                job.pct = min(99.5, (done_secs + min(cur, secs)) / grand * 100)
+            elif line.startswith("speed="):
+                job.speed = line.split("=", 1)[1].strip()
 
-    job.proc.wait()
-    t.join(timeout=2)
+        job.proc.wait()
+        t.join(timeout=2)
 
-    if job.state == "cancelled":
-        job.message = "Cancelled"
-        return
-    if job.proc.returncode == 0:
-        job.state, job.pct, job.message = "done", 100.0, "Done"
-    else:
-        job.state = "error"
-        job.message = f"ffmpeg exited with code {job.proc.returncode}"
-        job.log = err_tail[-12:]
+        if job.state == "cancelled":
+            job.message = "Cancelled"
+            return
+        if job.proc.returncode != 0:
+            job.state = "error"
+            job.message = f"ffmpeg exited with code {job.proc.returncode}"
+            job.log = err_tail[-12:]
+            return
+        done_secs += secs
+
+    job.state, job.pct, job.message = "done", 100.0, "Done"
 
 
 # ─────────────────────────────────────────── Embedded interface
 
 HTML = r"""<meta charset="utf-8">
-<title>ttcut __VERSION__ — table tennis rally tagging &amp; cutting</title>
+<title>picklecut __VERSION__ — pickleball rally tagging &amp; cutting</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root{
     --table:#08203A; --table-2:#0F3055; --panel:#0C2A49;
     --line:#3D6B96; --line-soft:#20486E;
     --ink:#E9F2FA; --ink-dim:#8FB2CE;
-    --ball:#FF7A18; --warn:#FFC24D; --good:#4ADE80; --bad:#FF6B6B;
-    --score:#FF7A18;   /* scoreboard accent, follows the colour picker */
+    --ball:#BFD730; --warn:#FFC24D; --good:#4ADE80; --bad:#FF6B6B;
+    --score:#BFD730;   /* scoreboard accent, follows the colour picker */
     --disp:"Avenir Next Condensed","Helvetica Neue Condensed","PingFang TC",system-ui,sans-serif;
     --body:"Helvetica Neue","PingFang TC",system-ui,sans-serif;
     --mono:ui-monospace,"SF Mono",Menlo,monospace;
@@ -880,7 +1160,7 @@ HTML = r"""<meta charset="utf-8">
   .btn:disabled:hover{background:transparent}
   .btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--ball);outline-offset:1px}
   .btn.hot{border-color:var(--ball);color:var(--ball)}
-  .btn.hot:hover:not(:disabled){background:rgba(255,122,24,.14)}
+  .btn.hot:hover:not(:disabled){background:rgba(191,215,48,.14)}
   label.file{position:relative;overflow:hidden}
   label.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
   .srcname{font-family:var(--mono);font-size:11.5px;color:var(--ink-dim);
@@ -901,6 +1181,13 @@ HTML = r"""<meta charset="utf-8">
   .speed button{padding:4px 8px;font-family:var(--mono);font-size:11px}
   .speed button[aria-pressed=true]{border-color:var(--ball);color:var(--ball)}
 
+  .tline{position:relative;height:18px;background:#04121F;border:1px solid var(--line-soft);
+    border-radius:3px;overflow:hidden;cursor:pointer;flex:none}
+  .tline i{position:absolute;top:0;bottom:0}
+  .tline i.keep{background:rgba(191,215,48,.30)}
+  .tline i.hl{top:10px;background:rgba(255,211,77,.85)}
+  .tline i.sv{width:1px;bottom:9px;background:rgba(233,242,250,.4)}
+  .tline i.ph{width:2px;background:#fff;opacity:.85}
   .legend{display:flex;gap:8px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-dim)}
   .legend span{border:1px solid var(--line-soft);border-radius:3px;padding:3px 8px}
   .legend kbd{font-family:var(--mono);color:var(--ink);margin-right:5px}
@@ -918,16 +1205,21 @@ HTML = r"""<meta charset="utf-8">
   .card .g{font-family:var(--disp);font-size:30px;line-height:1;color:var(--ink-dim)}
   .card .pts{font-family:var(--disp);font-size:58px;line-height:.98;font-variant-numeric:tabular-nums}
   .card.serving .pts{color:var(--score)}
+  .card .dots{font-size:11px;letter-spacing:2px;color:var(--score);min-width:16px;text-align:left}
   .card .cap{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);opacity:.7}
   .boardmeta{display:flex;justify-content:space-between;margin-top:10px;font-size:11.5px;color:var(--ink-dim)}
   .boardmeta b{color:var(--ink);font-weight:500}
   .boardmeta .rule{color:var(--warn)}
+  .adjbar{display:flex;align-items:center;gap:4px;margin-top:9px;font-size:11px;color:var(--ink-dim)}
+  .adjbar input[type=number]{width:38px;padding:3px 4px;font-size:11px}
+  .adjbar select{font-size:11px;padding:3px 2px}
+  .adjbar .btn{padding:3px 8px;font-size:11px}
 
   .streamhead{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;
     border-bottom:1px solid var(--line-soft);font-size:11px;letter-spacing:.13em;
     text-transform:uppercase;color:var(--ink-dim)}
   .stream{flex:1;overflow-y:auto;min-height:80px}
-  .ev{display:grid;grid-template-columns:60px 1fr auto auto;gap:8px;align-items:center;
+  .ev{display:grid;grid-template-columns:60px 1fr auto auto auto;gap:8px;align-items:center;
     padding:6px 14px;border-bottom:1px solid rgba(32,72,110,.5);cursor:pointer;font-size:12.5px}
   .ev:hover{background:var(--table-2)}
   .ev time{font-family:var(--mono);font-size:11.5px;color:var(--ink-dim)}
@@ -940,6 +1232,12 @@ HTML = r"""<meta charset="utf-8">
   .ev .kill{border:0;background:none;color:var(--ink-dim);cursor:pointer;padding:0 3px;font-size:15px}
   .ev .kill:hover{color:var(--ball)}
   .streamempty{padding:22px 14px;color:var(--ink-dim);font-size:12.5px;line-height:1.7}
+  .capbar{display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid var(--line-soft)}
+  .capbar input[type=text]{flex:1;width:auto;font-family:var(--body)}
+  .capbar input[type=number]{width:52px}
+  .ev.caption .dot{background:#9C6ADE}
+  .ev.hl .dot{background:#FFD34D}
+  .ev.adjust .dot{background:#FF6B6B}
 
   .cutout{border-top:1px solid var(--line-soft);padding:11px 14px;font-size:12px;
     color:var(--ink-dim);display:flex;flex-direction:column;gap:5px}
@@ -977,25 +1275,40 @@ HTML = r"""<meta charset="utf-8">
 
 <div class="shell">
   <header>
-    <div class="brand"><i></i>ttcut<small>__VERSION__</small></div>
+    <div class="brand"><i></i>picklecut<small>__VERSION__</small></div>
     <button class="btn" id="pick">Load video</button>
     <span class="srcname" id="srcname">nothing loaded</span>
-    <div class="ctl">A<input type="text" id="nameA" value="Player A"></div>
-    <div class="ctl">B<input type="text" id="nameB" value="Player B"></div>
-    <div class="ctl">First serve<select id="firstServer"><option value="0">A</option><option value="1">B</option></select></div>
+    <div class="ctl">A<input type="text" id="nameA" value="Team A"></div>
+    <div class="ctl">B<input type="text" id="nameB" value="Team B"></div>
+    <div class="ctl">First serve<select id="firstServer"><option value="0">A</option><option value="1">B</option></select>
+      <select id="firstServerNum" title="Server number when the video starts (doubles side-out). #2 is the fresh-game default; use #1 when continuing a game from another video.">
+        <option value="0">#2 · fresh game</option>
+        <option value="1">#1 · continuing</option>
+        <option value="2">#2 · continuing</option>
+      </select></div>
     <span style="flex:1"></span>
     <label class="btn file">Load tags<input type="file" id="load" accept=".json"></label>
     <button class="btn" id="save">Export JSON</button>
+    <button class="btn" id="score" title="Download the game results and point-by-point log (plain text)">Export score</button>
   </header>
 
   <div class="setbar">
     <div class="grp"><span class="tag">fps</span>
       <input type="number" id="fps" value="30" min="1" max="240" step="1"></div>
+    <div class="grp"><span class="tag">mode</span>
+      <select id="side">
+        <option value="doubles">Doubles</option>
+        <option value="singles">Singles</option>
+      </select>
+      <select id="scoring">
+        <option value="sideout">Side-out</option>
+        <option value="rally">Rally</option>
+      </select></div>
     <div class="grp"><span class="tag">game to</span>
       <input type="number" id="target" value="11" min="1" step="1"><span class="tag">pts</span></div>
-    <div class="grp"><span class="tag">format</span>
+    <div class="grp"><span class="tag">ending</span>
       <select id="deuce">
-        <option value="standard">Standard · by 2</option>
+        <option value="standard">Win by 2</option>
         <option value="capped">Capped · first to cap</option>
       </select>
       <span class="tag">cap</span><input type="number" id="cap" value="12" min="2" step="1" disabled></div>
@@ -1012,15 +1325,15 @@ HTML = r"""<meta charset="utf-8">
         <option value="first">First game</option>
       </select></div>
     <div class="grp"><span class="tag">accent</span>
-      <input type="color" id="accent" value="#FF7A18"
-             title="Shared by the point digits and the bar beside the names">
-      <button class="btn" id="accentReset" title="Back to the default orange">Reset</button></div>
+      <input type="color" id="accent" value="#BFD730"
+             title="Shared by the point digits, serve dots and the bar beside the names">
+      <button class="btn" id="accentReset" title="Back to the default chartreuse">Reset</button></div>
   </div>
 
   <div class="stage">
     <div class="screen" id="screen">
       <div class="empty" id="empty">
-        Click <b>Load video</b> at the top left to choose a match recording.<br>
+        Click <b>Load video</b> at the top left, or <b>drag a video file into this window</b>.<br>
         The file is read straight from this computer and is never uploaded anywhere.
       </div>
     </div>
@@ -1036,16 +1349,20 @@ HTML = r"""<meta charset="utf-8">
       </div>
     </div>
 
+    <div class="tline" id="tline"
+         title="Bright = kept, dark = cut, gold = highlight. Click to jump."></div>
+
     <div class="legend">
       <span><kbd>space</kbd>play / pause</span>
       <span><kbd>S</kbd>serve</span>
-      <span><kbd>A</kbd>point A</span>
-      <span><kbd>B</kbd>point B</span>
+      <span><kbd>A</kbd>rally to A</span>
+      <span><kbd>B</kbd>rally to B</span>
+      <span><kbd>H</kbd>highlight</span>
       <span><kbd>N</kbd>new game</span>
       <span><kbd>Z</kbd>undo</span>
-      <span><kbd>← →</kbd>frame</span>
-      <span><kbd>⇧← →</kbd>1 s</span>
-      <span><kbd>⌥← →</kbd>5 s</span>
+      <span><kbd>← →</kbd>1 s</span>
+      <span><kbd>⇧← →</kbd>5 s</span>
+      <span><kbd>⌥← →</kbd>frame</span>
       <span><kbd>1-4</kbd>speed</span>
     </div>
   </div>
@@ -1054,23 +1371,36 @@ HTML = r"""<meta charset="utf-8">
     <div class="board">
       <div class="cards">
         <div class="card" id="cardA">
-          <div class="who" id="whoA">Player A</div>
-          <div class="nums"><span class="g" id="gmA">0</span><span class="pts" id="ptsA">0</span></div>
+          <div class="who" id="whoA">Team A</div>
+          <div class="nums"><span class="g" id="gmA">0</span><span class="pts" id="ptsA">0</span><span class="dots" id="dotsA"></span></div>
           <div class="cap">games · points</div>
         </div>
         <div class="card" id="cardB">
-          <div class="who" id="whoB">Player B</div>
-          <div class="nums"><span class="g" id="gmB">0</span><span class="pts" id="ptsB">0</span></div>
+          <div class="who" id="whoB">Team B</div>
+          <div class="nums"><span class="g" id="gmB">0</span><span class="pts" id="ptsB">0</span><span class="dots" id="dotsB"></span></div>
           <div class="cap">games · points</div>
         </div>
       </div>
       <div class="boardmeta">
-        <span>Game <b id="gameNo">1</b><span id="ruleNote" class="rule"></span></span>
-        <span><b id="expServer">A</b> to serve</span>
+        <span>Game <b id="gameNo">1</b> · call <b id="callTxt">0–0–2</b><span id="ruleNote" class="rule"></span></span>
+        <span><b id="expServer">A</b> to serve<span id="srvNumTxt"></span></span>
+      </div>
+      <div class="adjbar" title="Score correction at the current playback position — fill in only the fields you want to change; scoring continues from there. Fixes a mis-tag or sets the games mid-match without re-tagging.">
+        <span class="tag">fix</span>
+        <span>g</span><input type="number" id="adjGA" placeholder="·" min="0"><input type="number" id="adjGB" placeholder="·" min="0">
+        <span>p</span><input type="number" id="adjPA" placeholder="·" min="0"><input type="number" id="adjPB" placeholder="·" min="0">
+        <select id="adjSrv"><option value="">srv —</option><option value="A">A</option><option value="B">B</option></select>
+        <select id="adjNum"><option value="">#—</option><option value="1">#1</option><option value="2">#2</option></select>
+        <button class="btn" id="adjAdd">Fix</button>
       </div>
     </div>
 
     <div class="streamhead"><span>events</span><span id="evcount">0</span></div>
+    <div class="capbar">
+      <input type="text" id="capText" placeholder="Caption text… (Enter adds it)" maxlength="120">
+      <input type="number" id="capDur" value="3" min="0.5" step="0.5" title="Seconds on screen">
+      <button class="btn" id="capAdd" title="Burn this line into the video, bottom-centre, at the current time">+ Cap</button>
+    </div>
     <div class="stream" id="stream"></div>
 
     <div class="cutout">
@@ -1092,7 +1422,16 @@ HTML = r"""<meta charset="utf-8">
           <option value="high" selected>Standard</option>
           <option value="max">Best (slow)</option>
         </select>
-        <label class="ctl" style="margin-left:auto"><input type="checkbox" id="cutLets">cut lets too</label>
+        <select id="renderScope" title="What to render: the full cut match, only the rallies marked with H, or both files in one go">
+          <option value="full">Full match</option>
+          <option value="highlights">Highlights only</option>
+          <option value="both">Full + highlights</option>
+        </select>
+        <select id="encoder" title="Encoder: auto = the GPU hardware encoder detected at startup (CPU when there is none). Max quality always uses the CPU.">
+          <option value="">Auto</option>
+          <option value="libx264">CPU (libx264)</option>
+        </select>
+        <label class="ctl" style="margin-left:auto"><input type="checkbox" id="cutLets">cut replays too</label>
       </div>
       <div class="out" id="outPath">—</div>
       <button class="btn hot go" id="go" disabled>Render video</button>
@@ -1114,6 +1453,7 @@ HTML = r"""<meta charset="utf-8">
 
   let video = null, events = [], mediaTime = 0, srcName = '', srcPath = '';
   let outPath = '', ffmpegOK = false, polling = null;
+  let blobURL = null, fpsSamples = [], fpsFilled = false;
 
   const num = (id, d) => { const v = +$(id).value; return isFinite(v) ? v : d; };
   const fps    = () => Math.max(1, num('fps', 30));
@@ -1137,6 +1477,7 @@ HTML = r"""<meta charset="utf-8">
     s = Math.round(s);
     return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
   };
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   /* ───────────────────────── Payload sent to Python
      Scoring and cut statistics are computed in Python only; the interface no
@@ -1144,25 +1485,26 @@ HTML = r"""<meta charset="utf-8">
   function docPayload() {
     const nm = names(), sg = startGames(), sp = startPoints();
     return {
-      version: 2, generator: 'ttcut ' + VERSION, source: srcName, fps: fps(),
+      version: 3, generator: 'picklecut ' + VERSION, source: srcName, fps: fps(),
+      sport: 'pickleball',
       pointsPerGame: target(),
       players: {A: nm[0], B: nm[1]},
       firstServer: firstServer() === 0 ? 'A' : 'B',
-      format: {pointsPerGame: target(), deuce: deuce(), cap: capVal()},
+      format: {pointsPerGame: target(), deuce: deuce(), cap: capVal(),
+               scoring: $('scoring').value, side: $('side').value},
       start: {games: {A: sg[0], B: sg[1]},
               points: {A: sp[0], B: sp[1]},
-              handicapScope: scope()},
+              handicapScope: scope(),
+              serverNum: +$('firstServerNum').value},
       pads: {tail: num('tailPad', 1), lead: num('leadPad', 0.3)},
       scoreboard: {accent: $('accent').value},
-      events: events.map(e => ({
-        t: +e.t.toFixed(3), frame: frameOf(e.t), type: e.type,
-        ...(e.winner === undefined ? {} : {winner: e.winner})
-      }))
+      events: events.map(e => ({...e, t: +e.t.toFixed(3), frame: frameOf(e.t)}))
     };
   }
   const optPayload = () => ({
     min_cut: num('minCut', 2), cut_lets: $('cutLets').checked,
-    quality: $('quality').value
+    quality: $('quality').value, scope: $('renderScope').value,
+    encoder: $('encoder').value || undefined
   });
 
   /* ───────────────────────── Video */
@@ -1172,6 +1514,7 @@ HTML = r"""<meta charset="utf-8">
       const r = await fetch('/pick-video', {method: 'POST'});
       const d = await r.json();
       if (d.cancelled || !d.path) return;
+      if (blobURL) { URL.revokeObjectURL(blobURL); blobURL = null; }
       srcPath = d.path; srcName = d.name; outPath = d.defaultOut;
       $('srcname').textContent = d.name;
       $('srcname').title = d.path;
@@ -1188,10 +1531,10 @@ HTML = r"""<meta charset="utf-8">
     } finally { $('pick').disabled = false; }
   });
 
-  function mountVideo() {
+  function mountVideo(src) {
     if (video) { video.pause(); video.remove(); }
     video = document.createElement('video');
-    video.src = '/video?t=' + Date.now();
+    video.src = src || ('/video?t=' + Date.now());
     video.preload = 'auto'; video.playsInline = true;
     emptyEl.style.display = 'none';
     screenEl.appendChild(video);
@@ -1207,6 +1550,26 @@ HTML = r"""<meta charset="utf-8">
   function pumpFrames() {
     if (!video || !video.requestVideoFrameCallback) return;
     video.requestVideoFrameCallback((now, meta) => {
+      /* A dropped file cannot be probed by ffprobe (no path), so estimate the
+         frame rate from presented-frame timing during plain 1x playback and
+         snap it to the nearest standard rate. */
+      if (blobURL && !fpsFilled && video && !video.paused && video.playbackRate === 1) {
+        fpsSamples.push(meta.mediaTime);
+        if (fpsSamples.length >= 30) {
+          const dt = fpsSamples[fpsSamples.length - 1] - fpsSamples[0];
+          if (dt > 0.2) {
+            const est = (fpsSamples.length - 1) / dt;
+            const std = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60, 119.88, 120];
+            let best = std[0];
+            for (const s of std) if (Math.abs(s - est) < Math.abs(best - est)) best = s;
+            if (Math.abs(best - est) / best < 0.05) {
+              $('fps').value = Math.round(best * 100) / 100;
+              fpsFilled = true; refresh();
+            }
+          }
+          fpsSamples = [];
+        }
+      }
       mediaTime = meta.mediaTime; tick(); pumpFrames();
     });
   }
@@ -1221,6 +1584,7 @@ HTML = r"""<meta charset="utf-8">
     $('tc').textContent = fmt(t);
     $('frameno').textContent = 'frame ' + frameOf(t);
     if (document.activeElement !== $('scrub')) $('scrub').value = t;
+    positionPlayhead();
   }
   $('scrub').addEventListener('input', e => { if (video) video.currentTime = +e.target.value; });
 
@@ -1238,7 +1602,74 @@ HTML = r"""<meta charset="utf-8">
     const b = e.target.closest('button'); if (b) setRate(+b.dataset.r);
   });
 
+  /* ───────────────────────── Drag & drop
+     Browsers never reveal a dropped file's real path, so the drop mounts the
+     file directly for preview and tagging; the native dialog opens once at
+     render time to tell Python (and ffmpeg) where the file actually lives. */
+  addEventListener('dragover', e => e.preventDefault());
+  addEventListener('drop', e => {
+    e.preventDefault();
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    if (/\.json$/i.test(f.name)) { loadTagsFile(f); return; }
+    if (!/^video\//.test(f.type) &&
+        !/\.(mp4|mov|m4v|mkv|avi|webm|ts|mts)$/i.test(f.name)) {
+      banner('That does not look like a video file.'); return;
+    }
+    if (blobURL) URL.revokeObjectURL(blobURL);
+    blobURL = URL.createObjectURL(f);
+    srcPath = ''; srcName = f.name; outPath = '';
+    fpsSamples = []; fpsFilled = false;
+    $('srcname').textContent = f.name + ' (dropped)';
+    $('srcname').title = f.name;
+    $('outPath').textContent = '—';
+    mountVideo(blobURL);
+    banner('Dropped video ready for tagging; the frame rate fills in during 1x playback. Rendering will open the file dialog once to confirm where the file lives.');
+    updateGo(); refresh();
+  });
+
   /* ───────────────────────── Events */
+  function addCaption() {
+    if (!video) return;
+    const txt = $('capText').value.trim();
+    if (!txt) { $('capText').focus(); return; }
+    const t = Math.round(now() * fps()) / fps();
+    events.push({t, type: 'caption', text: txt, dur: Math.max(0.5, num('capDur', 3))});
+    events.sort((a, b) => a.t - b.t);
+    $('capText').value = '';
+    refresh();
+  }
+  $('capAdd').addEventListener('click', addCaption);
+  $('capText').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addCaption(); }
+  });
+
+  /* Score correction: only the filled-in fields override; scoring continues
+     from the corrected state. */
+  function addAdjust() {
+    if (!video) return;
+    const t = Math.round(now() * fps()) / fps();
+    const ev = {t, type: 'adjust'};
+    const gA = $('adjGA').value, gB = $('adjGB').value;
+    const pA = $('adjPA').value, pB = $('adjPB').value;
+    if (gA !== '' || gB !== '')
+      ev.games = {...(gA === '' ? {} : {A: +gA}), ...(gB === '' ? {} : {B: +gB})};
+    if (pA !== '' || pB !== '')
+      ev.points = {...(pA === '' ? {} : {A: +pA}), ...(pB === '' ? {} : {B: +pB})};
+    if ($('adjSrv').value) ev.server = $('adjSrv').value;
+    if ($('adjNum').value) ev.serverNum = +$('adjNum').value;
+    if (!ev.games && !ev.points && !ev.server && !ev.serverNum) {
+      banner('Fill in at least one field to correct (games, points, server or #).');
+      return;
+    }
+    events.push(ev);
+    events.sort((a, b) => a.t - b.t);
+    ['adjGA','adjGB','adjPA','adjPB'].forEach(id => $(id).value = '');
+    $('adjSrv').value = ''; $('adjNum').value = '';
+    refresh();
+  }
+  $('adjAdd').addEventListener('click', addAdjust);
+
   function add(type, winner) {
     if (!video) return;
     const t = Math.round(now() * fps()) / fps();
@@ -1262,6 +1693,7 @@ HTML = r"""<meta charset="utf-8">
   async function doRefresh() {
     const mine = ++seq;
     $('cap').disabled = deuce() !== 'capped';
+    $('firstServerNum').disabled = !(isSideout() && isDoubles());
     try {
       const r = await fetch('/fold', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -1270,43 +1702,74 @@ HTML = r"""<meta charset="utf-8">
       const st = await r.json();
       if (mine !== seq) return;               // drop stale responses
       paint(st);
-      banner(null);
+      banner(!st.ok && $('renderScope').value === 'highlights' ? st.reason : null);
     } catch (e) {
       banner('Cannot reach the local service. Is the terminal window still open?');
     }
   }
 
   /* ───────────────────────── Painting */
+  const isDoubles = () => $('side').value === 'doubles';
+  const isSideout = () => $('scoring').value === 'sideout';
+
+  // Official score call: serving side first, then receivers, then the server
+  // number (doubles side-out only)
+  function callOf(a, b, srv, num) {
+    const first = srv === 0 ? a : b, second = srv === 0 ? b : a;
+    return isSideout() && isDoubles()
+      ? `${first}–${second}–${num}` : `${first}–${second}`;
+  }
+
   function paint(st) {
     const nm = names(), cur = st.cur;
     $('whoA').textContent = nm[0]; $('whoB').textContent = nm[1];
     $('ptsA').textContent = cur.a;  $('ptsB').textContent = cur.b;
     $('gmA').textContent = cur.gA;  $('gmB').textContent = cur.gB;
     $('gameNo').textContent = cur.gameNo;
+    $('callTxt').textContent = callOf(cur.a, cur.b, cur.server, cur.serverNum);
     $('ruleNote').textContent = deuce() === 'capped' ? ` · cap ${capVal()}` : '';
     $('expServer').textContent = nm[cur.server];
+    $('srvNumTxt').textContent = isSideout() && isDoubles() ? ` · #${cur.serverNum}` : '';
+    const dots = '●'.repeat(isSideout() && isDoubles() ? cur.serverNum : 1);
+    $('dotsA').textContent = cur.server === 0 ? dots : '';
+    $('dotsB').textContent = cur.server === 1 ? dots : '';
     $('cardA').classList.toggle('serving', cur.server === 0);
     $('cardB').classList.toggle('serving', cur.server === 1);
 
     const stream = $('stream');
     $('evcount').textContent = events.length;
     if (!events.length) {
-      stream.innerHTML = '<div class="streamempty">No events yet.<br>Play the video and press <b style="color:var(--ink)">S</b> the moment the ball leaves the bat on a serve, then <b style="color:var(--ink)">A</b> or <b style="color:var(--ink)">B</b> when the point is won.</div>';
+      stream.innerHTML = '<div class="streamempty">No events yet.<br>Play the video and press <b style="color:var(--ink)">S</b> the moment the serve is struck, then <b style="color:var(--ink)">A</b> or <b style="color:var(--ink)">B</b> for whoever wins the rally — the score and side-outs are worked out for you.</div>';
     } else {
       let prevServe = false, html = '';
       events.forEach((e, i) => {
         const s = st.snaps[i];
         let label, cls;
-        if (e.type === 'serve') { cls = 'serve'; label = prevServe ? 'Serve · let' : 'Serve'; }
+        if (e.type === 'serve') { cls = 'serve'; label = prevServe ? 'Serve · replay' : 'Serve'; }
         else if (e.type === 'game') { cls = 'game'; label = 'New game'; }
-        else { cls = 'point'; label = 'Point ' + nm[e.winner === 'A' ? 0 : 1]; }
-        prevServe = e.type === 'serve';
-        const sc = s ? (s.won ? `<em>${s.gA}–${s.gB} games</em>` : `${s.a}–${s.b}`) : '';
+        else if (e.type === 'caption') { cls = 'caption'; label = '“' + esc(e.text) + '”'; }
+        else if (e.type === 'highlight') { cls = 'hl'; label = '★ Highlight'; }
+        else if (e.type === 'adjust') {
+          cls = 'adjust';
+          const p = [];
+          if (e.games) p.push(`${e.games.A ?? '·'}–${e.games.B ?? '·'} games`);
+          if (e.points) p.push(`${e.points.A ?? '·'}–${e.points.B ?? '·'}`);
+          if (e.server || e.serverNum)
+            p.push((e.server || '') + (e.serverNum ? '#' + e.serverNum : ''));
+          label = 'Fix ' + p.join(' · ');
+        }
+        else { cls = 'point'; label = 'Rally ' + nm[e.winner === 'A' ? 0 : 1]; }
+        prevServe = e.type === 'serve' ||
+          (['caption','highlight','adjust'].includes(e.type) && prevServe);
+        const sc = s ? (s.won ? `<em>${s.gA}–${s.gB} games</em>`
+                              : s.scored === false ? 'side out'
+                              : callOf(s.a, s.b, s.srv, s.srvNum)) : '';
         html += `<div class="ev ${cls}" data-i="${i}">
           <time>${fmt(e.t)}</time>
           <span class="lbl"><i class="dot"></i>${label}</span>
           <span class="sc">${s && s.won ? `${s.a}–${s.b}` : ''}</span>
           <span class="sc">${sc}</span>
+          <button class="kill" data-move="${i}" title="Move to the current playback position">⟲</button>
           <button class="kill" data-kill="${i}" title="Delete">×</button>
         </div>`;
       });
@@ -1319,15 +1782,47 @@ HTML = r"""<meta charset="utf-8">
     $('cutT').textContent = (c.seconds || 0).toFixed(1) + 's';
     $('outT').textContent = (c.outSeconds || 0).toFixed(1) + 's'
       + (c.pct ? ` · ${c.pct}% shorter` : '');
+    drawTimeline(st);
     updateGo(st.ok);
   }
 
+  /* ── LosslessCut-style timeline: bright = kept, dark = cut, gold = highlight */
+  function drawTimeline(st) {
+    const tl = $('tline');
+    const dur = video && video.duration;
+    if (!dur) { tl.innerHTML = ''; return; }
+    const pct = t => (Math.max(0, Math.min(dur, t)) / dur * 100);
+    const seg = (k, cls) =>
+      `<i class="${cls}" style="left:${pct(k.from).toFixed(3)}%;width:${Math.max(0.15, pct(k.to) - pct(k.from)).toFixed(3)}%"></i>`;
+    let html = '';
+    (st.keepList || []).forEach(k => html += seg(k, 'keep'));
+    (st.hlList || []).forEach(k => html += seg(k, 'hl'));
+    events.filter(e => e.type === 'serve').forEach(e =>
+      html += `<i class="sv" style="left:${pct(e.t).toFixed(3)}%"></i>`);
+    html += '<i class="ph" id="tlph"></i>';
+    tl.innerHTML = html;
+    positionPlayhead();
+  }
+  function positionPlayhead() {
+    const ph = document.getElementById('tlph');
+    if (ph && video && video.duration)
+      ph.style.left = (now() / video.duration * 100).toFixed(3) + '%';
+  }
+  $('tline').addEventListener('click', e => {
+    if (!video || !video.duration) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    video.pause();
+    video.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * video.duration;
+  });
+
   function updateGo(planOK) {
     const running = polling !== null;
-    const ok = !!srcPath && ffmpegOK && events.length > 0 && planOK !== false;
+    const loaded = !!srcPath || !!blobURL;
+    const ok = loaded && ffmpegOK && events.length > 0 && planOK !== false;
     $('go').disabled = running || !ok;
-    if (!ffmpegOK && srcPath) $('go').textContent = 'ffmpeg not found';
-    else $('go').textContent = running ? 'Rendering…' : 'Render video';
+    if (!ffmpegOK && loaded) $('go').textContent = 'ffmpeg not found';
+    else $('go').textContent = running ? 'Rendering…'
+      : (!srcPath && blobURL ? 'Render video (confirm file…)' : 'Render video');
   }
 
   function banner(msg) {
@@ -1339,6 +1834,12 @@ HTML = r"""<meta charset="utf-8">
   $('stream').addEventListener('click', e => {
     const k = e.target.closest('[data-kill]');
     if (k) { events.splice(+k.dataset.kill, 1); refresh(); return; }
+    const mv = e.target.closest('[data-move]');
+    if (mv && video) {          // re-time a mis-placed tag without re-tagging
+      events[+mv.dataset.move].t = Math.round(now() * fps()) / fps();
+      events.sort((a, b) => a.t - b.t);
+      refresh(); return;
+    }
     const row = e.target.closest('.ev');
     if (row && video) { video.pause(); video.currentTime = events[+row.dataset.i].t; }
   });
@@ -1348,19 +1849,23 @@ HTML = r"""<meta charset="utf-8">
   }
   $('accent').addEventListener('input', paintAccent);
   $('accentReset').addEventListener('click', () => {
-    $('accent').value = '#FF7A18'; paintAccent();
+    $('accent').value = '#BFD730'; paintAccent();
   });
 
-  ['nameA','nameB','firstServer','target','fps','tailPad','leadPad','minCut',
-   'deuce','cap','sgA','sgB','spA','spB','scope','cutLets']
+  ['nameA','nameB','firstServer','firstServerNum','target','fps','tailPad','leadPad','minCut',
+   'deuce','cap','sgA','sgB','spA','spB','scope','cutLets','side','scoring','renderScope']
     .forEach(id => $(id).addEventListener('input', refresh));
 
-  /* ───────────────────────── Keyboard */
+  /* ───────────────────────── Keyboard
+     Only fields you actually type in swallow the shortcuts; the scrub bar,
+     checkboxes and buttons keep focus after a click, and the shortcuts must
+     keep working then (preventDefault stops the control's own key action). */
   addEventListener('keydown', e => {
     const el = document.activeElement;
-    if (el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return;
+    if (el && (el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' ||
+               (el.tagName === 'INPUT' && !/^(range|checkbox)$/.test(el.type)))) return;
     if (e.metaKey || e.ctrlKey) return;
-    const step = e.altKey ? 5 : e.shiftKey ? 1 : 1 / fps();
+    const step = e.altKey ? 1 / fps() : e.shiftKey ? 5 : 1;
     switch (e.key) {
       case ' ':          if (video) video.paused ? video.play() : video.pause(); break;
       case 'ArrowLeft':  seekBy(-step); break;
@@ -1368,6 +1873,7 @@ HTML = r"""<meta charset="utf-8">
       case 's': case 'S': add('serve'); break;
       case 'a': case 'A': add('point', 'A'); break;
       case 'b': case 'B': add('point', 'B'); break;
+      case 'h': case 'H': add('highlight'); break;
       case 'n': case 'N': add('game'); break;
       case 'z': case 'Z': undo(); break;
       case '1': setRate(0.5); break;
@@ -1382,6 +1888,22 @@ HTML = r"""<meta charset="utf-8">
   /* ───────────────────────── Rendering */
   $('go').addEventListener('click', async () => {
     $('go').disabled = true;
+    if (!srcPath) {          // dropped file: confirm the real location once
+      try {
+        const r = await fetch('/pick-video', {method: 'POST'});
+        const d = await r.json();
+        if (d.cancelled || !d.path) {
+          banner('Rendering needs the actual file on disk — pick it in the dialog (choose the same file you dropped).');
+          updateGo(); return;
+        }
+        srcPath = d.path; srcName = d.name; outPath = d.defaultOut;
+        $('srcname').textContent = d.name;
+        $('srcname').title = d.path;
+        $('outPath').textContent = d.defaultOut;
+        if (d.info && d.info.fps) $('fps').value = Math.round(d.info.fps * 100) / 100;
+        banner(null);
+      } catch (e) { banner('Could not confirm the file: ' + e.message); updateGo(); return; }
+    }
     $('plog').hidden = true; $('plog').classList.remove('bad');
     $('bar').classList.remove('done','bad');
     $('progWrap').hidden = false;
@@ -1443,6 +1965,21 @@ HTML = r"""<meta charset="utf-8">
   }
 
   /* ───────────────────────── Save and load */
+  $('score').addEventListener('click', async () => {
+    try {
+      const d = await (await fetch('/score', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({doc: docPayload(), opt: optPayload()})
+      })).json();
+      const url = URL.createObjectURL(new Blob([d.text || ''], {type: 'text/plain;charset=utf-8'}));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (srcName.replace(/\.[^.]+$/, '') || 'match') + '.score.txt';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { banner('Score export failed: ' + e.message); }
+  });
+
   $('save').addEventListener('click', async () => {
     const doc = docPayload();
     try {                       // include the cut list in the export too, matching the V1.22 format
@@ -1460,16 +1997,12 @@ HTML = r"""<meta charset="utf-8">
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 
-  $('load').addEventListener('change', e => {
-    const f = e.target.files[0]; if (!f) return;
+  function loadTagsFile(f) {
     const r = new FileReader();
     r.onload = () => {
       try {
         const d = JSON.parse(r.result);
-        events = (d.events || []).map(x => ({
-          t: x.t, type: x.type,
-          ...(x.winner === undefined ? {} : {winner: x.winner})
-        })).sort((a,b) => a.t - b.t);
+        events = (d.events || []).map(x => ({...x})).sort((a,b) => a.t - b.t);
         if (d.fps) $('fps').value = d.fps;
         if (d.players) { $('nameA').value = d.players.A; $('nameB').value = d.players.B; }
         if (d.firstServer) $('firstServer').value = d.firstServer === 'B' ? '1' : '0';
@@ -1479,11 +2012,14 @@ HTML = r"""<meta charset="utf-8">
         $('target').value = F.pointsPerGame || d.pointsPerGame || 11;
         $('deuce').value  = F.deuce || 'standard';
         $('cap').value    = F.cap || (+$('target').value + 1);
+        $('scoring').value = F.scoring || 'sideout';
+        $('side').value    = F.side || 'doubles';
         const S = d.start || {}, g = S.games || {}, p = S.points || {};
         $('sgA').value = g.A || 0; $('sgB').value = g.B || 0;
         $('spA').value = p.A || 0; $('spB').value = p.B || 0;
         $('scope').value = S.handicapScope || 'every';
-        $('accent').value = (d.scoreboard || {}).accent || '#FF7A18';
+        $('firstServerNum').value = String([1, 2].includes(S.serverNum) ? S.serverNum : 0);
+        $('accent').value = (d.scoreboard || {}).accent || '#BFD730';
         paintAccent();
         refresh();
       } catch (err) {
@@ -1491,6 +2027,11 @@ HTML = r"""<meta charset="utf-8">
       }
     };
     r.readAsText(f);
+  }
+
+  $('load').addEventListener('change', e => {
+    const f = e.target.files[0]; if (!f) return;
+    loadTagsFile(f);
     e.target.value = '';
   });
 
@@ -1500,6 +2041,14 @@ HTML = r"""<meta charset="utf-8">
     try {
       const s = await (await fetch('/state')).json();
       ffmpegOK = !!s.ffmpeg;
+      if (s.ffmpeg) {          // encoder select: auto = the server-detected default, then each HW encoder
+        const sel = $('encoder'), cpu = sel.querySelector('[value="libx264"]');
+        sel.options[0].textContent = 'Auto (' + (s.defaultEncoder || 'libx264') + ')';
+        (s.hwEncoders || []).forEach(enc => {
+          const o = document.createElement('option');
+          o.value = enc; o.textContent = enc; sel.insertBefore(o, cpu);
+        });
+      }
       if (s.video) {
         srcPath = s.video; srcName = s.videoName;
         $('srcname').textContent = s.videoName;
@@ -1527,7 +2076,7 @@ def guess_type(path):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = f"ttcut/{VERSION}"
+    server_version = f"picklecut/{VERSION}"
 
     def log_message(self, *a):
         pass                                    # do not spam the console with every range request
@@ -1566,6 +2115,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(dict(
                 video=v, videoName=os.path.basename(v) if v else None,
                 ffmpeg=STATE["ffmpeg"],
+                hwEncoders=detect_hw_encoders(STATE["ffmpeg"]),
+                defaultEncoder=default_encoder(STATE["ffmpeg"]),
                 job=job.snapshot() if job else None))
         if p == "/render/status":
             with STATE_LOCK:
@@ -1596,6 +2147,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._render()
             if p == "/render/cancel":
                 return self._cancel()
+            if p == "/score":
+                return self._score()
         except Exception as ex:
             return self._json(dict(error=f"{type(ex).__name__}: {ex}"), 500)
         self.send_error(404)
@@ -1671,6 +2224,8 @@ class Handler(BaseHTTPRequestHandler):
         pl = plan(doc, opt)
         sc = pl["scoring"]
         res = dict(cur=sc["cur"], snaps=sc["snaps"], ok=pl["ok"], reason=pl["reason"])
+        res["hlList"] = [{"from": round(s, 3), "to": round(t, 3)}
+                         for s, t in pl.get("hl", [])]
         if pl["ok"]:
             span, total = pl["span"], pl["total"]
             res["cuts"] = dict(
@@ -1681,8 +2236,11 @@ class Handler(BaseHTTPRequestHandler):
                 pct=round((span - total) / span * 100) if span > 0 else 0)
             res["cutList"] = [{"from": round(f, 3), "to": round(t, 3)}
                               for f, t, _ in pl["cuts"]]
+            res["keepList"] = [{"from": round(s, 3), "to": round(t, 3)}
+                               for s, t in pl["keeps"]]
         else:
             res["cuts"] = dict(n=0, seconds=0.0, dropped=0, outSeconds=0.0, pct=0)
+            res["keepList"] = []
         return self._json(res)
 
     # ── Native file dialog
@@ -1718,10 +2276,22 @@ class Handler(BaseHTTPRequestHandler):
         opt = req.get("opt") or {}
         out = req.get("out") or default_out(video)
         out = os.path.abspath(out)
+        scope = opt.get("scope") or "full"
 
-        pl = plan(doc, opt)
-        if not pl["ok"]:
-            return self._json(dict(error=pl["reason"]), 400)
+        stem = os.path.splitext(out)[0]
+        hl_out = (stem[:-4] if stem.endswith(".cut") else stem) + ".highlights.mp4"
+
+        # One plan per output file; "both" renders the full match and the
+        # highlight reel in sequence with one combined progress bar
+        wanted = ([("full", out)] if scope == "full" else
+                  [("highlights", hl_out)] if scope == "highlights" else
+                  [("full", out), ("highlights", hl_out)])
+        plans = []
+        for sc_name, sc_out in wanted:
+            pl = plan(doc, dict(opt, scope=sc_name))
+            if not pl["ok"]:
+                return self._json(dict(error=pl["reason"]), 400)
+            plans.append((pl, sc_out))
 
         # Drop a copy of the tags next to the output, so a re-render or a
         # parameter change can always be reproduced
@@ -1731,19 +2301,36 @@ class Handler(BaseHTTPRequestHandler):
                 json.dump(doc, f, ensure_ascii=False, indent=2)
         except Exception:
             pass
+        try:                     # and a score sheet next to it
+            with open(os.path.splitext(out)[0] + ".score.txt", "w",
+                      encoding="utf-8") as f:
+                f.write("\n".join(score_report(plans[0][0], doc_names(doc), video)) + "\n")
+        except Exception:
+            pass
 
-        logs = []
-        cmd, workdir, _ = build_render(doc, pl, video, out, opt, ffmpeg,
-                                       STATE["ffprobe"], log=logs.append,
-                                       progress=True)
-        new = Job(out, pl["total"])
+        logs, tasks = [], []
+        for pl, sc_out in plans:
+            cmd, workdir, _ = build_render(doc, pl, video, sc_out, opt, ffmpeg,
+                                           STATE["ffprobe"], log=logs.append,
+                                           progress=True)
+            tasks.append((cmd, workdir, pl["total"]))
+        grand = sum(pl["total"] for pl, _ in plans)
+        new = Job(" + ".join(os.path.basename(o) for _, o in plans), grand)
         new.log = logs
         with STATE_LOCK:
             STATE["job"] = new
-        threading.Thread(target=run_job, args=(new, cmd, workdir),
+        threading.Thread(target=run_job, args=(new, tasks),
                          daemon=True).start()
-        return self._json(dict(ok=True, out=out, total=round(pl["total"], 1),
-                               summary=summary_lines(pl, opt, video), notes=logs))
+        return self._json(dict(ok=True, out=new.out, total=round(grand, 1),
+                               summary=summary_lines(plans[0][0], opt, video),
+                               notes=logs))
+
+    def _score(self):
+        req = self._body()
+        doc = req.get("doc") or {}
+        pl = plan(doc, dict(req.get("opt") or {}, scope="full"))
+        text = "\n".join(score_report(pl, doc_names(doc), doc.get("source") or "")) + "\n"
+        return self._json(dict(text=text))
 
     def _cancel(self):
         with STATE_LOCK:
@@ -1775,7 +2362,19 @@ def free_port(preferred=8770):
     return 8770
 
 
-def serve(open_browser=True, port=None, ffmpeg_hint=None):
+def lan_ip():
+    """Best-effort local network address, for printing the --listen URL."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))          # no traffic is sent; just picks a route
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except OSError:
+        return None
+
+
+def serve(open_browser=True, port=None, ffmpeg_hint=None, listen=False):
     ff = find_ffmpeg(ffmpeg_hint)
     STATE["ffmpeg"] = ff
     if ff:
@@ -1784,17 +2383,28 @@ def serve(open_browser=True, port=None, ffmpeg_hint=None):
         STATE["ffprobe"] = probe_path if os.path.isfile(probe_path) else "ffprobe"
 
     port = port or free_port()
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    host = "0.0.0.0" if listen else "127.0.0.1"
+    httpd = ThreadingHTTPServer((host, port), Handler)
     httpd.daemon_threads = True
     url = f"http://127.0.0.1:{port}/"
 
-    print(f"\nttcut {VERSION}")
+    print(f"\npicklecut {VERSION}")
     print(f"UI        {url}")
     print(f"ffmpeg    {ff or 'not found -- tagging and JSON export work, rendering does not'}")
+    if ff:
+        hw = detect_hw_encoders(ff)
+        print(f"HW encode {', '.join(hw) + ' (default, changeable in the UI)' if hw else 'none, using CPU libx264'}")
     if not ff:
         print("          Mac: brew install ffmpeg-full")
         print("          Windows: put ffmpeg.exe next to this script")
-    print("\nListening on 127.0.0.1 only, not reachable from outside. Ctrl-C to stop.\n")
+    if listen:
+        ip = lan_ip()
+        print(f"LAN       {'http://%s:%d/' % (ip, port) if ip else 'listening on all interfaces, port %d' % port}")
+        print("\n! --listen exposes the UI to everyone on this network. Anyone who")
+        print("  opens it can tag, pop up the file dialog on THIS machine, and start")
+        print("  renders. Use it only on a network you trust. Ctrl-C to stop.\n")
+    else:
+        print("\nListening on 127.0.0.1 only, not reachable from outside. Ctrl-C to stop.\n")
 
     if open_browser:
         threading.Thread(target=lambda: (time.sleep(0.6), webbrowser.open(url)),
@@ -1807,19 +2417,54 @@ def serve(open_browser=True, port=None, ffmpeg_hint=None):
 
 # ─────────────────────────────────────────── Command-line render (same behaviour as V1.22)
 
+def join_videos(parts, out, ffmpeg_hint):
+    """Losslessly concatenate rendered parts with ffmpeg's concat demuxer
+    (stream copy, no re-encode). The parts must share resolution, frame rate
+    and encoder settings -- which they do when rendered with the same
+    quality options."""
+    if len(parts) < 2:
+        sys.exit("--join needs at least two files.")
+    for pth in parts:
+        if not os.path.isfile(pth):
+            sys.exit(f"not found: {pth}")
+    ffmpeg = find_ffmpeg(ffmpeg_hint, os.path.dirname(os.path.abspath(parts[0])))
+    if not ffmpeg:
+        sys.exit("ffmpeg not found.")
+    out = out or os.path.join(os.path.dirname(os.path.abspath(parts[0])),
+                              "match_full.mp4")
+    out = os.path.abspath(out)
+    lst = os.path.splitext(out)[0] + ".join.txt"
+    with open(lst, "w", encoding="utf-8") as f:
+        for pth in parts:
+            f.write("file '%s'\n" % os.path.abspath(pth).replace("'", r"'\''"))
+    print(f"\npicklecut {VERSION}")
+    print(f"Joining   {len(parts)} parts (stream copy, no quality loss)")
+    subprocess.run([ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", lst,
+                    "-c", "copy", "-movflags", "+faststart", out], check=True)
+    try:
+        os.remove(lst)
+    except OSError:
+        pass
+    print(f"\nDone -> {out}")
+
+
 def cli_render(args):
-    doc = json.load(open(args.tags, encoding="utf-8"))
+    doc = json.load(open(args.tags, encoding="utf-8-sig"))   # tolerate a Notepad BOM
     opt = dict(lead=args.lead, tail=args.tail, min_cut=args.min_cut,
                cut_lets=args.cut_lets, let_tail=args.let_tail,
                quality=args.quality, encoder=args.encoder, crf=args.crf,
                preset=args.preset, bitrate=args.bitrate, fps=args.fps,
                hdr=args.hdr, size=args.size, hwaccel=args.hwaccel, font=args.font,
-               accent=args.accent)
+               accent=args.accent,
+               scope="highlights" if args.highlights else "full")
 
     pl = plan(doc, opt)
     out = args.out or default_out(args.video)
+    if args.highlights and not args.out:
+        out = os.path.splitext(out)[0]
+        out = (out[:-4] if out.endswith(".cut") else out) + ".highlights.mp4"
 
-    print(f"\nttcut {VERSION}")
+    print(f"\npicklecut {VERSION}")
     if not pl["ok"]:
         sys.exit(pl["reason"])
     for line in summary_lines(pl, opt, args.video)[:5]:
@@ -1836,6 +2481,8 @@ def cli_render(args):
         print("\nKept segments:")
         for i, (s, e) in enumerate(pl["keeps"]):
             print(f"   {i + 1:2d}  {ts(s)} → {ts(e)}   {e - s:6.2f}s")
+        print()
+        print("\n".join(score_report(pl, doc_names(doc), args.video)))
         print()
         return
 
@@ -1857,7 +2504,11 @@ def cli_render(args):
     print("\n" + " ".join(
         (c if len(c) < 60 else f"<filter graph, {len(c)} chars, see {flt}>") for c in cmd) + "\n")
     subprocess.run(cmd, check=True, cwd=workdir)
+    sp = os.path.splitext(out)[0] + ".score.txt"
+    with open(sp, "w", encoding="utf-8") as f:
+        f.write("\n".join(score_report(pl, doc_names(doc), args.video)) + "\n")
     print(f"\nDone -> {out}")
+    print(f"Score sheet -> {sp}")
 
 
 def main():
@@ -1868,18 +2519,20 @@ def main():
             pass
 
     p = argparse.ArgumentParser(
-        description=f"ttcut {VERSION} — table tennis tagging and cutting. "
+        description=f"picklecut {VERSION} — pickleball tagging and cutting. "
                     f"With no arguments it opens the interface.")
-    p.add_argument("-v", "--version", action="version", version=f"ttcut {VERSION}")
+    p.add_argument("-v", "--version", action="version", version=f"picklecut {VERSION}")
     p.add_argument("tags", nargs="?", help="tags JSON (omit to open the interface)")
     p.add_argument("video", nargs="?", help="source video (omit to open the interface)")
     p.add_argument("-o", "--out", default=None)
     p.add_argument("--lead", type=float, default=None, help="seconds kept before each serve (defaults to the JSON)")
-    p.add_argument("--tail", type=float, default=None, help="seconds kept after each point (defaults to the JSON)")
+    p.add_argument("--tail", type=float, default=None, help="seconds kept after each rally (defaults to the JSON)")
     p.add_argument("--min-cut", type=float, default=DEFAULT_MIN_CUT,
                    help="cuts shorter than this are left alone, to avoid pointless jump cuts")
-    p.add_argument("--cut-lets", action="store_true", help="also cut the ball retrieval between lets")
-    p.add_argument("--let-tail", type=float, default=1.5, help="seconds kept after a let")
+    p.add_argument("--cut-replays", dest="cut_lets", action="store_true",
+                   help="also cut the dead time before a replayed serve")
+    p.add_argument("--replay-tail", dest="let_tail", type=float, default=1.5,
+                   help="seconds kept after a replayed serve")
 
     g = p.add_argument_group("quality")
     g.add_argument("--quality", choices=list(QUALITY), default="high",
@@ -1894,29 +2547,40 @@ def main():
     g.add_argument("--hdr", choices=["auto", "tonemap", "keep", "ignore"], default="auto")
     g.add_argument("--size", default=None, help="override the resolution, e.g. 1920x1080")
     g.add_argument("--hwaccel", default="auto",
-                   help="hardware decoding: auto (videotoolbox on Mac) / none / cuda / qsv")
+                   help="hardware decoding: auto (videotoolbox on Mac, off elsewhere) / none / cuda / qsv / d3d11va / dxva2")
 
     s = p.add_argument_group("interface")
     s.add_argument("--port", type=int, default=None, help="port to listen on")
     s.add_argument("--no-browser", action="store_true", help="do not open the browser automatically")
+    s.add_argument("--listen", action="store_true",
+                   help="also accept connections from the local network, so other "
+                        "devices on the same Wi-Fi can open the UI (trusted networks only)")
 
     p.add_argument("--accent", default=None,
                    help=f"scoreboard accent colour (point digits and side bar), "
-                        f"e.g. \"#FF7A18\". Default {DEFAULT_ACCENT}")
+                        f"e.g. \"#BFD730\". Default {DEFAULT_ACCENT}")
     p.add_argument("--font", default=FONT_NAME, help="font name used for the scoreboard names")
     p.add_argument("--ffmpeg", default=None,
                    help="path to ffmpeg.exe or its folder (when it is not on PATH)")
+    p.add_argument("--highlights", action="store_true",
+                   help="render only the rallies marked as highlights (H key); "
+                        "default output name becomes <source>.highlights.mp4")
     p.add_argument("--dry-run", action="store_true", help="print the cut list only, do not render")
+    p.add_argument("--join", nargs="+", metavar="PART", default=None,
+                   help="concatenate two or more rendered .cut.mp4 parts losslessly "
+                        "(stream copy); combine with -o for the output name")
     args = p.parse_args()
 
-    if args.tags and args.video:
+    if args.join:
+        join_videos(args.join, args.out, args.ffmpeg)
+    elif args.tags and args.video:
         cli_render(args)
     elif args.tags or args.video:
         p.error("a command-line render needs both the tags JSON and the video; "
                 "to open the interface, pass no arguments.")
     else:
         serve(open_browser=not args.no_browser, port=args.port,
-              ffmpeg_hint=args.ffmpeg)
+              ffmpeg_hint=args.ffmpeg, listen=args.listen)
 
 
 if __name__ == "__main__":

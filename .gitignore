@@ -19,6 +19,11 @@ ffprobe.exe
 __pycache__/
 *.pyc
 
+# PyInstaller 打包輸出
+build/
+dist/
+*.spec
+
 # 作業系統
 .DS_Store
 Thumbs.db
