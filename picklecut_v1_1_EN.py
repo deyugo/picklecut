@@ -3,7 +3,8 @@
 picklecut V1 — pickleball match video: tag rallies, cut the dead time, burn in a
 persistent scoreboard. One tool, start to finish.
 
-Copyright (c) 2026 MikaDD (Taiwan)
+Copyright (c) 2026 MikaDD (Taiwan), author of the original ttcut
+Copyright (c) 2026 deyugo, pickleball adaptation and later versions
 Released under the MIT Licence. See the LICENSE file for the full terms.
 
 Written with the assistance of Anthropic Claude.

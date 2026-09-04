@@ -2,7 +2,8 @@
 """
 ttcut V2 — 桌球比賽影片：標記、剪去撿球、疊上常駐計分板，一個工具做完。
 
-Copyright (c) 2026 MikaDD (Taiwan)
+Copyright (c) 2026 MikaDD (Taiwan)——原始桌球工具 ttcut 作者
+Copyright (c) 2026 deyugo——匹克球改寫與之後的版本
 以 MIT 授權釋出，完整條款見同目錄的 LICENSE。
 
 開發過程使用 Anthropic Claude 協助撰寫程式碼。
